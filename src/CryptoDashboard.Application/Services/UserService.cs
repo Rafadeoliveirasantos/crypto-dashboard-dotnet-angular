@@ -1,5 +1,5 @@
 ﻿using CryptoDashboard.Domain.Entities;
-using CryptoDashboard.Dto;
+using CryptoDashboard.Dto.User;
 
 namespace CryptoDashboard.Application.Services
 {

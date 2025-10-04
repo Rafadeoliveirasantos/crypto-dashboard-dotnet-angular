@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using CryptoDashboard.Application.Services;
-using CryptoDashboard.Dto;
+using CryptoDashboard.Dto.User;
 
 namespace CryptoDashboard.Api.Controllers
 {
