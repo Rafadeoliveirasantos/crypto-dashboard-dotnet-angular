@@ -12,7 +12,7 @@ namespace CryptoDashboard.IoC.DependencyInjection
         public static IServiceCollection AddDashboardDependencies(this IServiceCollection services)
         {
             services.AddMemoryCache();
-            services.AddScoped<ICryptoService, CryptoService>();
+            services.AddSingleton<ICryptoService, CryptoService>();
             services.AddHostedService<CryptoBackgroundService>();
             services.AddScoped<ISettingsService, SettingsService>();
             services.AddAutoMapper(typeof(CryptoMappingProfile).Assembly);

@@ -184,9 +184,30 @@ namespace CryptoDashboard.Infrastructure.Services
             return JsonSerializer.Deserialize<PriceChartDto>(json) ?? new PriceChartDto();
         }
 
-        public Task<ExchangeRateDto> GetExchangeRatesAsync(string baseCurrency, params string[] symbols)
+        public async Task<ExchangeRateDto> GetExchangeRatesAsync(string baseCurrency, params string[] symbols)
         {
-            return Task.FromResult(new ExchangeRateDto());
+            if (string.IsNullOrWhiteSpace(baseCurrency) || symbols is null || !symbols.Any())
+            {
+                return new ExchangeRateDto { Rates = new Dictionary<string, Dictionary<string, decimal>>() };
+            }
+
+            var client = _httpFactory.CreateClient("CoinGecko");
+
+            // Formata os parâmetros para a URL da API
+            var ids = string.Join(",", symbols);
+            var vsCurrencies = baseCurrency; // Para este endpoint, é a moeda de comparação
+
+            var url = $"simple/price?ids={ids}&vs_currencies={vsCurrencies}";
+
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+
+            // A resposta da API é diretamente o dicionário que queremos
+            var rates = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, decimal>>>(json);
+
+            return new ExchangeRateDto { Rates = rates };
         }
 
         public Task AddFavoriteAsync(string cryptoId)

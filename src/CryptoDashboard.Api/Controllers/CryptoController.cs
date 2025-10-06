@@ -158,30 +158,36 @@ namespace CryptoDashboard.Api.Controllers
         public async Task<IActionResult> ConvertCurrency([FromQuery] string from, [FromQuery] string to, [FromQuery] decimal amount)
         {
             if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to) || amount <= 0)
-                return BadRequest("Parâmetros inválidos.");
+                return BadRequest("Parâmetros inválidos. 'from' deve ser o ID da cripto (ex: 'bitcoin'), 'to' a moeda desejada (ex: 'usd') e 'amount' deve ser positivo.");
 
-            var rates = await _cryptoService.GetExchangeRatesAsync(from, to);
-            if (rates.Rates.TryGetValue(to, out var rate))
+            // 1. Chamamos o serviço corretamente:
+            //    - 'to' é a moeda de conversão (ex: "usd")
+            //    - 'from' é o ID da cripto que queremos cotar (ex: "bitcoin")
+            var exchangeData = await _cryptoService.GetExchangeRatesAsync(to, from);
+
+            // 2. Verificamos a estrutura de dados CORRETA:
+            //    - exchangeData.Rates é um dicionário onde a chave é o ID da cripto ('from')
+            //    - O valor é outro dicionário onde a chave é a moeda ('to')
+            if (exchangeData?.Rates != null &&
+                exchangeData.Rates.TryGetValue(from, out var currencyRates) &&
+                currencyRates.TryGetValue(to, out var rateValue))
             {
-                // Tenta converter Bid para decimal
-                if (decimal.TryParse(rate.Bid, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var bidValue))
+                // 3. Calculamos o valor convertido
+                var convertedAmount = amount * rateValue;
+
+                return Ok(new
                 {
-                    var converted = amount * bidValue;
-                    return Ok(new
-                    {
-                        From = from,
-                        To = to,
-                        Amount = amount,
-                        Rate = bidValue,
-                        Converted = converted
-                    });
-                }
-                else
-                {
-                    return BadRequest("Valor da cotação inválido.");
-                }
+                    From = from,
+                    To = to,
+                    Amount = amount,
+                    Rate = rateValue, // A cotação de 1 'from' em 'to'
+                    ConvertedAmount = convertedAmount,
+                    Timestamp = DateTime.UtcNow
+                });
             }
-            return BadRequest($"Taxa de conversão {from}->{to} não encontrada.");
+
+            // Se não encontramos a cotação, retornamos um erro claro
+            return NotFound($"A cotação para converter de '{from}' para '{to}' não foi encontrada.");
         }
     }
 }
