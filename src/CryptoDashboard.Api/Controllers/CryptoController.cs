@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CryptoDashboard.Api.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/cryptos")] // <-- CORREÇÃO APLICADA AQUI
     public class CryptoController : ControllerBase
     {
         private readonly ICryptoService _cryptoService;
@@ -15,7 +15,7 @@ namespace CryptoDashboard.Api.Controllers
             _cryptoService = cryptoService;
         }
 
-        // GET /cryptos?search=btc&minPrice=100&maxPrice=1000&variation=positive&orderBy=marketCap&direction=desc
+        // GET /api/cryptos
         [HttpGet]
         public async Task<IActionResult> GetCryptos(
             [FromQuery] string? search = null,
