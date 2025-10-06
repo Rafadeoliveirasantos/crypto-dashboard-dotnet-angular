@@ -1,4 +1,4 @@
-﻿namespace CryptoDashboard.Dto
+﻿namespace CryptoDashboard.Dto.Crypto.Exchange
 {
     public class ExchangeRateDto
     {

@@ -1,10 +1,11 @@
 ﻿using CryptoDashboard.Application.Services;
-using CryptoDashboard.Domain;
 using CryptoDashboard.Dto.Crypto;
-using CryptoDashboard.Dto;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using CryptoDashboard.Domain.Entities;
+using CryptoDashboard.Dto.Crypto.Alert;
+using CryptoDashboard.Dto.Crypto.Exchange;
 
 namespace CryptoDashboard.Infrastructure.Services
 {
@@ -191,7 +192,7 @@ namespace CryptoDashboard.Infrastructure.Services
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync();
 
-            var ratesDict = JsonSerializer.Deserialize<Dictionary<string, CurrencyRateDto>>(json) ?? new();
+            var ratesDict = JsonSerializer.Deserialize<Dictionary<string, ExchangeRateDto>>(json) ?? new();
             var rates = new ExchangeRateDto
             {
                 Rates = ratesDict

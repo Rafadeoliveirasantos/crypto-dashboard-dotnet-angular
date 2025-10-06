@@ -1,4 +1,4 @@
-﻿namespace CryptoDashboard.Dto.Crypto
+﻿namespace CryptoDashboard.Dto.Crypto.Alert
 {
     public class AlertHistoryDto
     {

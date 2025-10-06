@@ -1,6 +1,8 @@
 ﻿using CryptoDashboard.Application.Services;
+using CryptoDashboard.Infrastructure.HostedServices;
 using CryptoDashboard.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
+using CryptoDashboard.Application.Mapping;
 
 
 namespace CryptoDashboard.IoC.DependencyInjection
@@ -12,6 +14,9 @@ namespace CryptoDashboard.IoC.DependencyInjection
             services.AddHttpClient();
             services.AddMemoryCache();
             services.AddScoped<ICryptoService, CryptoService>();
+            services.AddHostedService<CryptoBackgroundService>();
+            services.AddScoped<ISettingsService, SettingsService>();
+            services.AddAutoMapper(typeof(CryptoMappingProfile).Assembly);
             return services;
         }
     }

@@ -1,5 +1,5 @@
 ﻿using CryptoDashboard.Application.Services;
-using CryptoDashboard.Dto.Crypto;
+using CryptoDashboard.Dto.Crypto.Alert;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CryptoDashboard.Api.Controllers
@@ -114,6 +114,74 @@ namespace CryptoDashboard.Api.Controllers
         {
             var history = await _cryptoService.GetAlertHistoryAsync();
             return Ok(history);
+        }
+
+        [HttpGet("compare")]
+        public async Task<IActionResult> CompareCryptos([FromQuery] string ids)
+        {
+            var idArray = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (idArray.Length == 0 || idArray.Length > 3)
+                return BadRequest("Você deve informar entre 1 e 3 ids de moedas para comparar.");
+
+            var allCryptos = await _cryptoService.GetCryptosAsync();
+            var selection = allCryptos.Where(c => idArray.Contains(c.Id)).ToList();
+
+            // Se quiser retornar campos específicos, pode criar um DTO CompareCryptoDto
+            return Ok(selection);
+        }
+
+        //Estatísticas 
+        [HttpGet("stats/top-gainers")]
+        public async Task<IActionResult> GetTopGainers([FromQuery] int count = 5)
+        {
+            var cryptos = await _cryptoService.GetCryptosAsync();
+            var topGainers = cryptos
+                .OrderByDescending(c => c.Variation24h)
+                .Take(count)
+                .ToList();
+            return Ok(topGainers);
+        }
+
+        [HttpGet("stats/top-losers")]
+        public async Task<IActionResult> GetTopLosers([FromQuery] int count = 5)
+        {
+            var cryptos = await _cryptoService.GetCryptosAsync();
+            var topLosers = cryptos
+                .OrderBy(c => c.Variation24h)
+                .Take(count)
+                .ToList();
+            return Ok(topLosers);
+        }
+
+        //Converter 
+        [HttpGet("convert")]
+        public async Task<IActionResult> ConvertCurrency([FromQuery] string from, [FromQuery] string to, [FromQuery] decimal amount)
+        {
+            if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to) || amount <= 0)
+                return BadRequest("Parâmetros inválidos.");
+
+            var rates = await _cryptoService.GetExchangeRatesAsync(from, to);
+            if (rates.Rates.TryGetValue(to, out var rate))
+            {
+                // Tenta converter Bid para decimal
+                if (decimal.TryParse(rate.Bid, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var bidValue))
+                {
+                    var converted = amount * bidValue;
+                    return Ok(new
+                    {
+                        From = from,
+                        To = to,
+                        Amount = amount,
+                        Rate = bidValue,
+                        Converted = converted
+                    });
+                }
+                else
+                {
+                    return BadRequest("Valor da cotação inválido.");
+                }
+            }
+            return BadRequest($"Taxa de conversão {from}->{to} não encontrada.");
         }
     }
 }

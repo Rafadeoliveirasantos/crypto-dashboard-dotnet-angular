@@ -1,6 +1,7 @@
-﻿using CryptoDashboard.Domain;
-using CryptoDashboard.Dto;
+﻿using CryptoDashboard.Domain.Entities;
 using CryptoDashboard.Dto.Crypto;
+using CryptoDashboard.Dto.Crypto.Alert;
+using CryptoDashboard.Dto.Crypto.Exchange;
 
 namespace CryptoDashboard.Application.Services
 {

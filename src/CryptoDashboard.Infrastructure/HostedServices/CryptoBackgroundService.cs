@@ -1,42 +1,56 @@
-﻿using CryptoDashboard.Application.Services;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using CryptoDashboard.Application.Services;
 
-public class CryptoDataRefreshService : BackgroundService
+namespace CryptoDashboard.Infrastructure.HostedServices
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<CryptoDataRefreshService> _logger;
-
-    public CryptoDataRefreshService(IServiceProvider serviceProvider, ILogger<CryptoDataRefreshService> logger)
+    public class CryptoBackgroundService : IHostedService, IDisposable
     {
-        _serviceProvider = serviceProvider;
-        _logger = logger;
-    }
+        private readonly ICryptoService _cryptoService;
+        private readonly ILogger<CryptoBackgroundService> _logger;
+        private Timer? _timer;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
+        public CryptoBackgroundService(ICryptoService cryptoService, ILogger<CryptoBackgroundService> logger)
+        {
+            _cryptoService = cryptoService;
+            _logger = logger;
+        }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("CryptoBackgroundService iniciado.");
+            _timer = new Timer(UpdateData, null, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+            return Task.CompletedTask;
+        }
+
+        private async void UpdateData(object? state)
         {
             try
             {
-                using (var scope = _serviceProvider.CreateScope())
-                {
-                    var cryptoService = scope.ServiceProvider.GetRequiredService<ICryptoService>();
-
-                    // Atualiza os dados e cache
-                    await cryptoService.GetCryptosAsync();
-                    await cryptoService.GetExchangeRatesAsync("USD", "BRL", "EUR"); // Adapte os símbolos conforme o uso
-
-                    _logger.LogInformation("Dados de criptomoedas e taxas atualizados às {time}", DateTimeOffset.Now);
-                }
+                _logger.LogInformation("Atualizando criptomoedas e taxas de câmbio...");
+                await _cryptoService.GetCryptosAsync();
+                await _cryptoService.GetExchangeRatesAsync("USD", "BRL", "EUR");
+                _logger.LogInformation("Atualização concluída.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao atualizar dados de criptomoedas!");
+                _logger.LogError(ex, "Erro ao atualizar dados no CryptoBackgroundService");
             }
+        }
 
-            await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("CryptoBackgroundService parado.");
+            _timer?.Change(Timeout.Infinite, 0);
+            return Task.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            _timer?.Dispose();
         }
     }
 }
