@@ -1,22 +1,25 @@
-﻿namespace CryptoDashboard.Dto.Crypto
+﻿using System.Text.Json.Serialization;
+
+namespace CryptoDashboard.Dto
 {
     public class CoinGeckoResponseDto
     {
-        public string Id { get; set; } = string.Empty;
-        public string Symbol { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string Image { get; set; } = string.Empty;
-        public decimal CurrentPrice { get; set; }
-        public decimal CurrentPriceBrl { get; set; }
-        public decimal MarketCap { get; set; }
-        public decimal PriceChangePercentage24h { get; set; }
-        public decimal TotalVolume { get; set; }
-        public DateTime LastUpdated { get; set; }
-        public SparklineDto? SparklineIn7d { get; set; }
-    }
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
 
-    public class SparklineDto
-    {
-        public List<decimal> Price { get; set; } = new();
+        [JsonPropertyName("symbol")]
+        public string? Symbol { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("image")]
+        public ImageInfo? Image { get; set; }
+
+        [JsonPropertyName("last_updated")]
+        public DateTime? LastUpdated { get; set; }
+
+        [JsonPropertyName("market_data")]
+        public MarketDataDto? MarketData { get; set; }
     }
 }

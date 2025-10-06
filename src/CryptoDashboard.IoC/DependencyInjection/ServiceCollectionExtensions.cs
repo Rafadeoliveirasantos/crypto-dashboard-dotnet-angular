@@ -11,7 +11,6 @@ namespace CryptoDashboard.IoC.DependencyInjection
     {
         public static IServiceCollection AddDashboardDependencies(this IServiceCollection services)
         {
-            services.AddHttpClient();
             services.AddMemoryCache();
             services.AddScoped<ICryptoService, CryptoService>();
             services.AddHostedService<CryptoBackgroundService>();

@@ -30,5 +30,9 @@ namespace CryptoDashboard.Application.Services
         Task RemoveAlertAsync(Guid alertId);
         Task<List<AlertDto>> GetAlertsAsync();
         Task<List<AlertHistoryDto>> GetAlertHistoryAsync();
+
+        // --- MÉTODO ADICIONADO AO CONTRATO ---
+        // Este método será chamado pelo serviço em background para processar os alertas.
+        Task ProcessAlertsAsync();
     }
 }

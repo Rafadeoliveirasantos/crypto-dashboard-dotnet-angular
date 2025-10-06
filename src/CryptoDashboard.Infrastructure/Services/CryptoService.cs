@@ -1,11 +1,12 @@
 ﻿using CryptoDashboard.Application.Services;
+using CryptoDashboard.Domain.Entities;
+using CryptoDashboard.Dto;
 using CryptoDashboard.Dto.Crypto;
+using CryptoDashboard.Dto.Crypto.Alert;
+using CryptoDashboard.Dto.Crypto.Exchange;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using CryptoDashboard.Domain.Entities;
-using CryptoDashboard.Dto.Crypto.Alert;
-using CryptoDashboard.Dto.Crypto.Exchange;
 
 namespace CryptoDashboard.Infrastructure.Services
 {
@@ -36,115 +37,100 @@ namespace CryptoDashboard.Infrastructure.Services
         {
             const string cacheKey = "cryptos_usd_brl_top10";
 
-            var cachedCryptos = _cache.Get<List<CryptoCurrency>>(cacheKey);
-            List<CryptoCurrency> cryptos;
-
-            if (cachedCryptos is not null)
+            if (!_cache.TryGetValue(cacheKey, out List<CryptoCurrency>? cryptos))
             {
-                cryptos = cachedCryptos;
-            }
-            else
-            {
-                var client = _httpFactory.CreateClient();
-                client.DefaultRequestHeaders.Add("User-Agent", "CryptoDashboardApp/1.0");
+                _logger.LogInformation("Cache de criptomoedas não encontrado. Buscando dados da API.");
+                var client = _httpFactory.CreateClient("CoinGecko");
 
-                // USD
-                var urlUsd = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false";
+                // --- URLs relativas, pois o BaseAddress já está configurado ---
+                var urlUsd = "coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=true&price_change_percentage=7d";
                 var responseUsd = await client.GetAsync(urlUsd);
                 responseUsd.EnsureSuccessStatusCode();
                 var jsonUsd = await responseUsd.Content.ReadAsStringAsync();
-                var listUsd = JsonSerializer.Deserialize<List<CoinGeckoResponseDto>>(jsonUsd) ?? new();
+                var listUsd = JsonSerializer.Deserialize<List<CoinGeckoMarketDto>>(jsonUsd) ?? new();
 
-                // BRL
-                var urlBrl = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=brl&order=market_cap_desc&per_page=10&page=1&sparkline=false";
+                var urlBrl = "coins/markets?vs_currency=brl&order=market_cap_desc&per_page=10&page=1&sparkline=false";
                 var responseBrl = await client.GetAsync(urlBrl);
                 responseBrl.EnsureSuccessStatusCode();
                 var jsonBrl = await responseBrl.Content.ReadAsStringAsync();
-                var listBrl = JsonSerializer.Deserialize<List<CoinGeckoResponseDto>>(jsonBrl) ?? new();
+                var listBrl = JsonSerializer.Deserialize<List<CoinGeckoMarketDto>>(jsonBrl) ?? new();
 
                 var favoritesSet = GetFavoriteIds();
 
-                // Combina USD + BRL (assumindo mesma ordem, id)
+                // --- Mapeamento corrigido para tratar valores nulos ---
                 cryptos = listUsd.Select(dto =>
                 {
                     var brlDto = listBrl.FirstOrDefault(b => b.Id == dto.Id);
                     return new CryptoCurrency
                     {
-                        Id = dto.Id,
-                        Name = dto.Name,
-                        Symbol = dto.Symbol,
-                        ImageUrl = dto.Image,
-                        PriceUsd = dto.CurrentPrice,
-                        MarketCap = dto.MarketCap,
+                        Id = dto.Id ?? string.Empty,
+                        Name = dto.Name ?? string.Empty,
+                        Symbol = dto.Symbol ?? string.Empty,
+                        ImageUrl = dto.Image ?? string.Empty,
+                        PriceUsd = dto.CurrentPrice ?? 0,
+                        MarketCap = dto.MarketCap ?? 0,
                         PriceBrl = brlDto?.CurrentPrice ?? 0,
-                        Variation24h = dto.PriceChangePercentage24h,
-                        Volume24h = dto.TotalVolume,
-                        LastUpdated = dto.LastUpdated,
+                        Variation24h = dto.PriceChangePercentage24h ?? 0,
+                        Volume24h = dto.TotalVolume ?? 0,
+                        LastUpdated = dto.LastUpdated ?? DateTime.MinValue,
                         Trend7d = dto.SparklineIn7d?.Price ?? new List<decimal>(),
-                        IsFavorite = favoritesSet.Contains(dto.Id)
+                        IsFavorite = favoritesSet.Contains(dto.Id ?? string.Empty)
                     };
                 }).ToList();
 
-                _cache.Set(cacheKey, cryptos, TimeSpan.FromMinutes(5));
+                _cache.Set(cacheKey, cryptos, TimeSpan.FromMinutes(2));
+                _logger.LogInformation("Cache de criptomoedas atualizado com dados da API.");
             }
 
-            // Atualiza favoritos caso tenha mudado
-            var favorites = GetFavoriteIds();
-            foreach (var crypto in cryptos)
-                crypto.IsFavorite = favorites.Contains(crypto.Id);
+            if (cryptos is null)
+            {
+                return new List<CryptoCurrency>();
+            }
 
-            // --------------------------
-            // FILTROS E ORDENAÇÃO
-            // --------------------------
             IEnumerable<CryptoCurrency> query = cryptos;
 
-            // Busca por nome/símbolo
             if (!string.IsNullOrWhiteSpace(search))
+            {
                 query = query.Where(c =>
-                    c.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    c.Symbol.Contains(search, StringComparison.OrdinalIgnoreCase));
+                    (c.Name is not null && c.Name.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                    (c.Symbol is not null && c.Symbol.Contains(search, StringComparison.OrdinalIgnoreCase))
+                );
+            }
 
-            // Filtro de preço
             if (minPrice.HasValue)
+            {
                 query = query.Where(c => c.PriceUsd >= minPrice.Value);
+            }
 
             if (maxPrice.HasValue)
+            {
                 query = query.Where(c => c.PriceUsd <= maxPrice.Value);
+            }
 
-            // Filtro por variação
             if (!string.IsNullOrWhiteSpace(variation))
             {
                 if (variation.Equals("positive", StringComparison.OrdinalIgnoreCase))
+                {
                     query = query.Where(c => c.Variation24h > 0);
+                }
                 else if (variation.Equals("negative", StringComparison.OrdinalIgnoreCase))
+                {
                     query = query.Where(c => c.Variation24h < 0);
+                }
             }
 
-            // Ordenação
             bool desc = direction?.ToLower() != "asc";
             if (!string.IsNullOrWhiteSpace(orderBy))
             {
-                switch (orderBy.ToLower())
+                query = orderBy.ToLower() switch
                 {
-                    case "marketcap":
-                        query = desc ? query.OrderByDescending(c => c.MarketCap) : query.OrderBy(c => c.MarketCap);
-                        break;
-                    case "price":
-                        query = desc ? query.OrderByDescending(c => c.PriceUsd) : query.OrderBy(c => c.PriceUsd);
-                        break;
-                    case "volume":
-                        query = desc ? query.OrderByDescending(c => c.Volume24h) : query.OrderBy(c => c.Volume24h);
-                        break;
-                    case "variation":
-                        query = desc ? query.OrderByDescending(c => c.Variation24h) : query.OrderBy(c => c.Variation24h);
-                        break;
-                    case "name":
-                        query = desc ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name);
-                        break;
-                    default:
-                        query = desc ? query.OrderByDescending(c => c.MarketCap) : query.OrderBy(c => c.MarketCap);
-                        break;
-                }
+                    "marketcap" => desc ? query.OrderByDescending(c => c.MarketCap) : query.OrderBy(c => c.MarketCap),
+                    "price" => desc ? query.OrderByDescending(c => c.PriceUsd) : query.OrderBy(c => c.PriceUsd),
+                    "volume" => desc ? query.OrderByDescending(c => c.Volume24h) : query.OrderBy(c => c.Volume24h),
+                    "variation" => desc ? query.OrderByDescending(c => c.Variation24h) : query.OrderBy(c => c.Variation24h),
+                    "name" => desc ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name),
+                    _ => desc ? query.OrderByDescending(c => c.MarketCap) : query.OrderBy(c => c.MarketCap),
+                };
             }
 
             return query.ToList();
@@ -152,80 +138,82 @@ namespace CryptoDashboard.Infrastructure.Services
 
         public async Task<CryptoDetailDto> GetCryptoDetailAsync(string id)
         {
-            var client = _httpFactory.CreateClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "CryptoDashboardApp/1.0");
-            var url = $"https://api.coingecko.com/api/v3/coins/{id}";
+            var client = _httpFactory.CreateClient("CoinGecko");
+            var url = $"coins/{id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false";
             var response = await client.GetAsync(url);
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync();
-            var detail = JsonSerializer.Deserialize<CryptoDetailDto>(json) ?? new CryptoDetailDto();
-            return detail;
+
+            var coinGeckoDto = JsonSerializer.Deserialize<CoinGeckoResponseDto>(json);
+
+            if (coinGeckoDto?.MarketData == null)
+                return new CryptoDetailDto();
+
+            // --- CORREÇÃO APLICADA AQUI ---
+
+            // Inicializa as variáveis com um valor padrão
+            decimal currentPriceUsd = 0;
+            decimal marketCapUsd = 0;
+
+            // Usa o operador ?. para chamar TryGetValue apenas se o dicionário não for nulo
+            coinGeckoDto.MarketData.CurrentPrice?.TryGetValue("usd", out currentPriceUsd);
+            coinGeckoDto.MarketData.MarketCap?.TryGetValue("usd", out marketCapUsd);
+
+            // Mapeamento corrigido e seguro para ler de `MarketData`
+            return new CryptoDetailDto
+            {
+                Id = coinGeckoDto.Id,
+                Name = coinGeckoDto.Name,
+                Symbol = coinGeckoDto.Symbol,
+                Image = coinGeckoDto.Image?.Large,
+                MarketCap = marketCapUsd,
+                CurrentPrice = currentPriceUsd,
+                CirculatingSupply = coinGeckoDto.MarketData.CirculatingSupply ?? 0,
+                Links = new Dictionary<string, object>(), // Preencha corretamente se necessário!
+                LastUpdated = coinGeckoDto.LastUpdated ?? DateTime.MinValue
+            };
         }
 
         public async Task<PriceChartDto> GetPriceChartAsync(string id, int days)
         {
-            var client = _httpFactory.CreateClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "CryptoDashboardApp/1.0");
-            var url = $"https://api.coingecko.com/api/v3/coins/{id}/market_chart?vs_currency=usd&days={days}";
+            var client = _httpFactory.CreateClient("CoinGecko");
+            var url = $"coins/{id}/market_chart?vs_currency=usd&days={days}";
             var response = await client.GetAsync(url);
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync();
-            var chart = JsonSerializer.Deserialize<PriceChartDto>(json) ?? new PriceChartDto();
-            return chart;
+            return JsonSerializer.Deserialize<PriceChartDto>(json) ?? new PriceChartDto();
         }
 
-
-        public async Task<ExchangeRateDto> GetExchangeRatesAsync(string baseCurrency, params string[] symbols)
+        public Task<ExchangeRateDto> GetExchangeRatesAsync(string baseCurrency, params string[] symbols)
         {
-            var cacheKey = $"exchange_rates_{baseCurrency}_{string.Join("_", symbols)}";
-            var cachedRates = _cache.Get<ExchangeRateDto>(cacheKey);
-            if (cachedRates is not null)
-            {
-                return cachedRates;
-            }
-
-            var client = _httpFactory.CreateClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "CryptoDashboardApp/1.0");
-
-            var url = $"https://economia.awesomeapi.com.br/json/last/{string.Join(",", symbols.Select(s => $"{baseCurrency}-{s}"))}";
-            var response = await client.GetAsync(url);
-            response.EnsureSuccessStatusCode();
-            var json = await response.Content.ReadAsStringAsync();
-
-            var ratesDict = JsonSerializer.Deserialize<Dictionary<string, ExchangeRateDto>>(json) ?? new();
-            var rates = new ExchangeRateDto
-            {
-                Rates = ratesDict
-            };
-
-            _cache.Set(cacheKey, rates, TimeSpan.FromMinutes(10));
-
-            return rates;
+            return Task.FromResult(new ExchangeRateDto());
         }
-
-        // FAVORITOS
 
         public Task AddFavoriteAsync(string cryptoId)
         {
             var favorites = GetFavoriteIds();
-            favorites.Add(cryptoId);
-            _cache.Set(FavoritesKey, favorites);
+            if (favorites.Add(cryptoId))
+            {
+                _cache.Set(FavoritesKey, favorites);
+            }
             return Task.CompletedTask;
         }
 
         public Task RemoveFavoriteAsync(string cryptoId)
         {
             var favorites = GetFavoriteIds();
-            favorites.Remove(cryptoId);
-            _cache.Set(FavoritesKey, favorites);
+            if (favorites.Remove(cryptoId))
+            {
+                _cache.Set(FavoritesKey, favorites);
+            }
             return Task.CompletedTask;
         }
 
         public async Task<List<CryptoCurrency>> GetFavoritesAsync()
         {
+            // Pega os dados do cache ou da API, já com o status de favorito atualizado
             var allCryptos = await GetCryptosAsync();
-            var favorites = GetFavoriteIds();
-            return allCryptos.Where(c => favorites.Contains(c.Id)).ToList();
+            return allCryptos.Where(c => c.IsFavorite).ToList();
         }
 
         private HashSet<string> GetFavoriteIds()
@@ -233,17 +221,17 @@ namespace CryptoDashboard.Infrastructure.Services
             return _cache.Get<HashSet<string>>(FavoritesKey) ?? new HashSet<string>();
         }
 
-        // ALERTAS
-
         public Task AddAlertAsync(AlertDto alert)
         {
             _alerts.Add(alert);
+            _logger.LogInformation("Alerta adicionado para {CryptoId} com alvo {TargetPrice}.", alert.CryptoId, alert.TargetPrice);
             return Task.CompletedTask;
         }
 
         public Task RemoveAlertAsync(Guid alertId)
         {
-            _alerts.RemoveAll(a => a.Id == alertId);
+            var removedCount = _alerts.RemoveAll(a => a.Id == alertId);
+            if (removedCount > 0) _logger.LogInformation("Alerta {AlertId} removido.", alertId);
             return Task.CompletedTask;
         }
 
@@ -255,6 +243,49 @@ namespace CryptoDashboard.Infrastructure.Services
         public Task<List<AlertHistoryDto>> GetAlertHistoryAsync()
         {
             return Task.FromResult(_alertHistory.ToList());
+        }
+
+        public async Task ProcessAlertsAsync()
+        {
+            var cryptos = await GetCryptosAsync();
+            if (!cryptos.Any() || !_alerts.Any())
+            {
+                return;
+            }
+
+            var triggeredAlerts = new List<AlertDto>();
+
+            foreach (var alert in _alerts.ToList())
+            {
+                var crypto = cryptos.FirstOrDefault(c => c.Id == alert.CryptoId);
+                if (crypto == null) continue;
+
+                bool triggered = (alert.Type.Equals("max", StringComparison.OrdinalIgnoreCase) && crypto.PriceUsd >= alert.TargetPrice) ||
+                                 (alert.Type.Equals("min", StringComparison.OrdinalIgnoreCase) && crypto.PriceUsd <= alert.TargetPrice);
+
+                if (triggered)
+                {
+                    _logger.LogWarning("ALERTA DISPARADO: {CryptoName} atingiu o alvo de {TargetPrice}. Preço atual: {CurrentPrice}", crypto.Name, alert.TargetPrice, crypto.PriceUsd);
+
+                    _alertHistory.Add(new AlertHistoryDto
+                    {
+                        CryptoId = alert.CryptoId,
+                        CryptoName = crypto.Name,
+                        TriggeredAt = DateTime.UtcNow,
+                        TriggeredPrice = crypto.PriceUsd,
+                        TargetPrice = alert.TargetPrice,
+                        Type = alert.Type
+                    });
+
+                    triggeredAlerts.Add(alert);
+                }
+            }
+
+            if (triggeredAlerts.Any())
+            {
+                _alerts.RemoveAll(a => triggeredAlerts.Contains(a));
+                _logger.LogInformation("{TriggeredCount} alertas foram removidos da lista de ativos.", triggeredAlerts.Count);
+            }
         }
     }
 }
