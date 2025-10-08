@@ -9,7 +9,6 @@
         public decimal PriceUsd { get; set; }
         public decimal PriceBrl { get; set; }
         public decimal Variation24h { get; set; }
-        public List<decimal> Trend7d { get; set; } = new();
         public decimal MarketCap { get; set; }
         public decimal Volume24h { get; set; }
         public DateTime LastUpdated { get; set; }
